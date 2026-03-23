@@ -1,0 +1,135 @@
+from typing import Dict, Tuple
+
+
+class ConfigError(Exception):
+    """Excepción personalizada para errores de configuración."""
+    pass
+
+
+class MazeConfig:
+    def __init__(self, file_name: str):
+        self.file_name = file_name
+        self.width: int = 0
+        self.height: int = 0
+        self.seed: int = 0
+        self.output_file: str = ""
+        self.entry: Tuple[int, int] = (0, 0)
+        self.exit: Tuple[int, int] = (0, 0)
+        self.is_perfect: bool = False
+        self.algorithm: str = "DFS"
+
+        raw_data = self._read_file()
+        self._process_and_validate(raw_data)
+
+    def _read_file(self) -> Dict[str, str]:
+        config: Dict[str, str] = {}
+        try:
+            with open(self.file_name, 'r') as file:
+                for line in file:
+                    line = line.strip()
+                    if not line or line.startswith("#"):
+                        continue
+                    if "=" not in line:
+                        continue
+                    key, value = line.split("=", 1)
+                    config[key.strip().upper()] = value.strip()
+            return config
+        except FileNotFoundError:
+            raise ConfigError(f"The file could not be found: {self.file_name}")
+
+    def _process_and_validate(self, config: Dict[str, str]) -> None:
+        # 1. COMPROBACIÓN DE CAMPOS OBLIGATORIOS
+        # Verificamos si falta alguno de los 5 pilares
+        required_fields = ["WIDTH", "HEIGHT", "ENTRY", "EXIT", "PERFECT"]
+        missing = [field for field in required_fields if field not in config]
+
+        if missing:
+            fields_str = ", ".join(missing)
+            raise ConfigError(
+                f"Missing required fields: {fields_str}. "
+                f"Please ensure these are defined in {self.file_name}."
+            )
+
+        try:
+            # Ahora procesamos los valores sabiendo que existen
+            self.width = int(config["WIDTH"])
+            self.height = int(config["HEIGHT"])
+
+            # 2. VALIDACIÓN ESTRICTA DE 'PERFECT' (No más bananas)
+            perfect_raw = config.get("PERFECT", "True").strip()
+            # Usamos capitalize para que acepte 'true', 'TRUE' o 'True'
+            if perfect_raw.capitalize() not in ["True", "False"]:
+                raise ConfigError(
+                    f"Invalid value for PERFECT: '{perfect_raw}'. "
+                    "Must be either 'True' or 'False'."
+                )
+            self.is_perfect = (perfect_raw.capitalize() == "True")
+
+            self.output_file = config.get("OUTPUT_FILE", "maze.txt")
+            self.seed = int(config.get("SEED", 0))
+            self.algorithm = config.get("ALGORITHM", "DFS")
+
+            self.entry = self._parse_coords(config["ENTRY"])
+            self.exit = self._parse_coords(config["EXIT"])
+
+        except ValueError:
+            # Respetamos tu print original de error numérico
+            raise ConfigError(
+                "One of the numeric values in config.txt is invalid.")
+
+        # VALIDACIÓN DE RANGOS (Llama a tus prints de límites)
+        self._validate_boundaries()
+
+    def _parse_coords(self, text: str) -> Tuple[int, int]:
+        try:
+            parts = [p.strip() for p in text.split(",")]
+            # Deben ser exactamente 2 elementos, ni más ni menos
+            if len(parts) != 2:
+                raise ConfigError(
+                    "Invalid coordinate format. Must be exactly two "
+                    "integers separated by a single comma: 'x,y'."
+                )
+            if parts[0] == "" or parts[1] == "":
+                raise ConfigError(
+                    "Invalid coordinate format. Both coordinates"
+                    " must be present and non-empty: 'x,y'."
+                )
+            return (int(parts[0]), int(parts[1]))
+        except ValueError:
+            raise ConfigError("Invalid coordinate format. Coordinates"
+                              " must be integers: 'x,y'.")
+        except ConfigError:
+            raise ConfigError("Invalid coordinate format. Must be 'x,y'.")
+        except Exception:
+            raise ConfigError("Invalid coordinate format. Must be 'x,y'.")
+
+    def _validate_boundaries(self) -> None:
+        """Verifica dimensiones mínimas y que ENTRY y EXIT estén dentro del
+        laberinto."""
+        # Validación de tamaño mínimo
+        if self.width < 3 or self.height < 3:
+            raise ConfigError(
+                f"Maze dimensions are too small ({self.width}x{self.height}). "
+                "Minimum size required is 3x3 to ensure a valid path can be"
+                "generated."
+            )
+
+        # Validar Entrada
+        if not (0 <= self.entry[0] < self.width) or not (0 <= self.entry[1] <
+                                                         self.height):
+            raise ConfigError(
+                f"The ENTRY ({self.entry[0]},{self.entry[1]}) It's out of"
+                f"bounds.\n"
+                f"For a labyrinth of {self.width}x{self.height}, the allowed"
+                f"range is from 0 to {self.width-1}."
+            )
+
+        # Validar Salida
+        if not (0 <= self.exit[0] < self.width) or not (0 <= self.exit[1]
+                                                        < self.height):
+            raise ConfigError(
+                f"The EXIT ({self.exit[0]},{self.exit[1]}) It's out of"
+                f"bounds.\n"
+                f"For a labyrinth of {self.width}x{self.height}, the allowed"
+                f"range is from 0 to {self.width-1}."
+            )
